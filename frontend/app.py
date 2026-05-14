@@ -7,7 +7,7 @@ st.set_page_config(layout='wide')
 
 st.title('🚀 AI Analytics Platform')
 
-API_URL = "https://your-backend-name.onrender.com/analyze/"
+API_URL = "https://ai-analytics-platform-1.onrender.com/analyze/"
 
 uploaded_file = st.file_uploader(
     'Upload CSV or Excel',
