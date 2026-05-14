@@ -3,6 +3,6 @@ uvicorn
 pandas
 numpy
 scikit-learn
+xgboost
 python-multipart
-joblib
 openpyxl
