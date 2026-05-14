@@ -117,7 +117,7 @@ if uploaded_file:
                     API_URL,
                     files=files,
                     params={'target': target},
-                    timeout=120
+                    timeout=300
                 )
 
                 # -----------------------------
