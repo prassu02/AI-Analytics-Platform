@@ -5,12 +5,9 @@ numpy
 scikit-learn
 xgboost
 lightgbm
-catboost
 plotly
 matplotlib
-shap
-optuna
 python-multipart
 reportlab
-prophet
 joblib
+openpyxl
