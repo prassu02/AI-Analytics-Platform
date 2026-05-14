@@ -2,77 +2,173 @@ import streamlit as st
 import pandas as pd
 import requests
 import plotly.express as px
+import plotly.figure_factory as ff
 
-st.set_page_config(layout="wide")
+st.set_page_config(
+    page_title="AI Analytics Platform",
+    layout="wide",
+    page_icon="🚀"
+)
 
-st.title("🚀 AI Analytics Platform")
+# ---------------- SIDEBAR ----------------
+st.sidebar.title("⚙️ AI Platform Controls")
 
 API_URL = "https://ai-analytics-platform-1.onrender.com/analyze/"
 
-file = st.file_uploader("Upload CSV or Excel", type=["csv", "xlsx"])
+uploaded_file = st.sidebar.file_uploader(
+    "Upload Dataset",
+    type=["csv", "xlsx"]
+)
 
-if file:
+# ---------------- MAIN TITLE ----------------
+st.title("🚀 AI Analytics Platform")
+st.caption("AutoML | XAI | Metrics | Visualization Dashboard")
 
-    df = pd.read_csv(file) if file.name.endswith("csv") else pd.read_excel(file)
+if uploaded_file:
 
-    st.subheader("📊 Dataset Preview")
-    st.dataframe(df.head(), use_container_width=True)
+    # Load dataset
+    df = pd.read_csv(uploaded_file) if uploaded_file.name.endswith(".csv") else pd.read_excel(uploaded_file)
 
-    target = st.selectbox("Select Target Column", df.columns)
+    # ---------------- TABS ----------------
+    tab1, tab2, tab3, tab4 = st.tabs([
+        "📊 Dataset",
+        "📈 Visualization",
+        "🤖 AutoML",
+        "📊 Metrics"
+    ])
 
-    if st.button("🚀 Run AutoML"):
+    # ================= DATASET =================
+    with tab1:
 
-        files = {
-            "file": (file.name, file.getvalue(), file.type)
-        }
+        st.subheader("Dataset Overview")
 
-        res = requests.post(API_URL, files=files, params={"target": target})
+        col1, col2, col3 = st.columns(3)
 
-        try:
-            result = res.json()
-        except:
-            st.error("Backend error: No JSON response")
-            st.stop()
+        col1.metric("Rows", df.shape[0])
+        col2.metric("Columns", df.shape[1])
+        col3.metric("Missing Values", df.isnull().sum().sum())
 
-        if "error" in result:
-            st.error(result["error"])
-            st.stop()
+        st.dataframe(df.head(), use_container_width=True)
 
-        # ---------------- RESULTS ----------------
-        st.subheader("🤖 AutoML Results")
+        st.subheader("Statistical Summary")
+        st.dataframe(df.describe(include="all"), use_container_width=True)
 
-        st.success(f"Best Model: {result['best_model']}")
-        st.info(f"Task: {result['task']}")
-        st.info(f"Metric: {result['metric']}")
+    # ================= VISUALIZATION =================
+    with tab2:
 
-        # ---------------- SCORES ----------------
-        score_df = pd.DataFrame({
-            "Model": list(result["scores"].keys()),
-            "Score": list(result["scores"].values())
-        })
+        st.subheader("Data Visualization")
 
-        st.subheader("📈 Model Scores")
-        st.dataframe(score_df, use_container_width=True)
+        numeric_cols = df.select_dtypes(include="number").columns
 
-        fig = px.bar(score_df, x="Model", y="Score", title="Model Comparison")
-        st.plotly_chart(fig, use_container_width=True)
+        chart = st.selectbox(
+            "Select Chart",
+            ["Histogram", "Scatter", "Box", "Correlation Heatmap"]
+        )
 
-        # ---------------- METRICS ----------------
-        st.subheader("📊 Detailed Metrics")
+        if len(numeric_cols) > 0:
 
-        metrics = result.get("metrics", {})
+            if chart == "Histogram":
+                col = st.selectbox("Column", numeric_cols)
+                fig = px.histogram(df, x=col)
+                st.plotly_chart(fig, use_container_width=True)
 
-        for model, values in metrics.items():
+            elif chart == "Scatter":
+                x = st.selectbox("X-axis", numeric_cols)
+                y = st.selectbox("Y-axis", numeric_cols)
+                fig = px.scatter(df, x=x, y=y)
+                st.plotly_chart(fig, use_container_width=True)
 
-            st.markdown(f"### 🔹 {model}")
+            elif chart == "Box":
+                col = st.selectbox("Column", numeric_cols)
+                fig = px.box(df, y=col)
+                st.plotly_chart(fig, use_container_width=True)
 
-            df_metrics = pd.DataFrame(
-                list(values.items()),
-                columns=["Metric", "Value"]
+            elif chart == "Correlation Heatmap":
+                fig = ff.create_annotated_heatmap(
+                    z=df[numeric_cols].corr().values,
+                    x=list(numeric_cols),
+                    y=list(numeric_cols),
+                    colorscale="Viridis"
+                )
+                st.plotly_chart(fig, use_container_width=True)
+
+    # ================= AUTO ML =================
+    with tab3:
+
+        st.subheader("AutoML Engine")
+
+        target = st.selectbox("Select Target Column", df.columns)
+
+        if st.button("🚀 Run AutoML"):
+
+            files = {
+                "file": (uploaded_file.name, uploaded_file.getvalue(), uploaded_file.type)
+            }
+
+            response = requests.post(
+                API_URL,
+                files=files,
+                params={"target": target}
             )
 
-            st.dataframe(df_metrics, use_container_width=True)
+            try:
+                result = response.json()
+            except:
+                st.error("Backend error")
+                st.stop()
 
-        # ---------------- BEST MODEL CARD ----------------
-        best = result["best_model"]
-        st.metric("🏆 Best Model", best, result["scores"][best])
+            if "error" in result:
+                st.error(result["error"])
+                st.stop()
+
+            st.success("Model Training Completed!")
+
+            st.subheader("🏆 Best Model")
+            st.metric("Best Model", result["best_model"], result["scores"][result["best_model"]])
+
+            score_df = pd.DataFrame({
+                "Model": list(result["scores"].keys()),
+                "Score": list(result["scores"].values())
+            })
+
+            fig = px.bar(
+                score_df,
+                x="Model",
+                y="Score",
+                color="Score",
+                text="Score",
+                title="Model Comparison"
+            )
+
+            st.plotly_chart(fig, use_container_width=True)
+
+    # ================= METRICS =================
+    with tab4:
+
+        st.subheader("Advanced Model Metrics")
+
+        if "result" in locals():
+
+            metrics = result.get("metrics", {})
+
+            for model, values in metrics.items():
+
+                st.markdown(f"### 🔹 {model}")
+
+                col1, col2, col3, col4 = st.columns(4)
+
+                for i, (k, v) in enumerate(values.items()):
+
+                    if i == 0:
+                        col1.metric(k, v)
+                    elif i == 1:
+                        col2.metric(k, v)
+                    elif i == 2:
+                        col3.metric(k, v)
+                    elif i == 3:
+                        col4.metric(k, v)
+
+                st.divider()
+
+else:
+    st.info("👈 Upload dataset from sidebar to start")
