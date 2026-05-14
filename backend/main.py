@@ -8,10 +8,11 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
 from sklearn.metrics import accuracy_score, r2_score
 
-# MODELS
+# Classification Models
 from sklearn.linear_model import LogisticRegression, LinearRegression
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 from sklearn.svm import SVC, SVR
+
 from xgboost import XGBClassifier, XGBRegressor
 
 app = FastAPI()
@@ -39,7 +40,7 @@ def home():
     }
 
 # ---------------------------------------------------
-# ANALYZE
+# ANALYZE DATASET
 # ---------------------------------------------------
 @app.post("/analyze/")
 async def analyze_dataset(
@@ -74,9 +75,13 @@ async def analyze_dataset(
         # -------------------------------------------
         df = df.drop_duplicates()
 
-        df = df.fillna(df.select_dtypes(
+        numeric_cols = df.select_dtypes(
             include=np.number
-        ).mean())
+        ).columns
+
+        df[numeric_cols] = df[numeric_cols].fillna(
+            df[numeric_cols].mean()
+        )
 
         # -------------------------------------------
         # FEATURES + TARGET
@@ -142,7 +147,7 @@ async def analyze_dataset(
 
                 "XGBoost":
                 XGBClassifier(
-                    eval_metric='mlogloss'
+                    eval_metric="mlogloss"
                 )
 
             }
