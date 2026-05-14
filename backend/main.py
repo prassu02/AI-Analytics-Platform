@@ -8,11 +8,10 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
 from sklearn.metrics import accuracy_score, r2_score
 
-# Classification Models
+# MODELS
 from sklearn.linear_model import LogisticRegression, LinearRegression
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 from sklearn.svm import SVC, SVR
-
 from xgboost import XGBClassifier, XGBRegressor
 
 app = FastAPI()
@@ -114,7 +113,7 @@ async def analyze_dataset(
             task = "regression"
 
         # -------------------------------------------
-        # SPLIT
+        # TRAIN TEST SPLIT
         # -------------------------------------------
         X_train, X_test, y_train, y_test = train_test_split(
             X,
