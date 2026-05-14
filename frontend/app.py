@@ -3,332 +3,76 @@ import pandas as pd
 import requests
 import plotly.express as px
 
-# ---------------------------------------------------
-# PAGE CONFIG
-# ---------------------------------------------------
-st.set_page_config(
-    page_title="AI Analytics Platform",
-    layout="wide"
-)
+st.set_page_config(layout="wide")
 
-# ---------------------------------------------------
-# TITLE
-# ---------------------------------------------------
 st.title("🚀 AI Analytics Platform")
 
-st.markdown(
-    """
-    Upload a dataset and run automated Machine Learning analysis.
-    """
-)
-
-# ---------------------------------------------------
-# API URL
-# ---------------------------------------------------
 API_URL = "https://ai-analytics-platform-1.onrender.com/analyze/"
 
-# ---------------------------------------------------
-# FILE UPLOAD
-# ---------------------------------------------------
-uploaded_file = st.file_uploader(
-    "Upload CSV or Excel File",
-    type=["csv", "xlsx"]
-)
+file = st.file_uploader("Upload CSV or Excel", type=["csv", "xlsx"])
 
-# ---------------------------------------------------
-# IF FILE EXISTS
-# ---------------------------------------------------
-if uploaded_file:
+if file:
 
-    try:
+    df = pd.read_csv(file) if file.name.endswith("csv") else pd.read_excel(file)
 
-        if uploaded_file.name.endswith(".csv"):
-
-            df = pd.read_csv(uploaded_file)
-
-        else:
-
-            df = pd.read_excel(uploaded_file)
-
-        st.success("✅ Dataset Loaded Successfully")
-
-    except Exception as e:
-
-        st.error(f"File Error: {e}")
-        st.stop()
-
-    # ---------------------------------------------------
-    # DATA PREVIEW
-    # ---------------------------------------------------
     st.subheader("📊 Dataset Preview")
+    st.dataframe(df.head(), use_container_width=True)
 
-    col1, col2 = st.columns(2)
+    target = st.selectbox("Select Target Column", df.columns)
 
-    with col1:
+    if st.button("🚀 Run AutoML"):
 
-        st.write("Head")
-        st.dataframe(
-            df.head(),
-            width='stretch'
-        )
+        files = {
+            "file": (file.name, file.getvalue(), file.type)
+        }
 
-    with col2:
+        res = requests.post(API_URL, files=files, params={"target": target})
 
-        st.write("Tail")
-        st.dataframe(
-            df.tail(),
-            width='stretch'
-        )
+        try:
+            result = res.json()
+        except:
+            st.error("Backend error: No JSON response")
+            st.stop()
 
-    # ---------------------------------------------------
-    # DATASET INFO
-    # ---------------------------------------------------
-    st.subheader("📌 Dataset Information")
+        if "error" in result:
+            st.error(result["error"])
+            st.stop()
 
-    a, b, c = st.columns(3)
+        # ---------------- RESULTS ----------------
+        st.subheader("🤖 AutoML Results")
 
-    a.metric("Rows", df.shape[0])
+        st.success(f"Best Model: {result['best_model']}")
+        st.info(f"Task: {result['task']}")
+        st.info(f"Metric: {result['metric']}")
 
-    b.metric("Columns", df.shape[1])
+        # ---------------- SCORES ----------------
+        score_df = pd.DataFrame({
+            "Model": list(result["scores"].keys()),
+            "Score": list(result["scores"].values())
+        })
 
-    c.metric(
-        "Missing Values",
-        int(df.isnull().sum().sum())
-    )
+        st.subheader("📈 Model Scores")
+        st.dataframe(score_df, use_container_width=True)
 
-    # ---------------------------------------------------
-    # TARGET
-    # ---------------------------------------------------
-    target = st.selectbox(
-        "🎯 Select Target Column",
-        df.columns
-    )
+        fig = px.bar(score_df, x="Model", y="Score", title="Model Comparison")
+        st.plotly_chart(fig, use_container_width=True)
 
-    # ---------------------------------------------------
-    # VISUALIZATION
-    # ---------------------------------------------------
-    st.subheader("📈 Visualization")
+        # ---------------- METRICS ----------------
+        st.subheader("📊 Detailed Metrics")
 
-    numeric_columns = df.select_dtypes(
-        include='number'
-    ).columns
+        metrics = result.get("metrics", {})
 
-    if len(numeric_columns) > 0:
+        for model, values in metrics.items():
 
-        chart = st.selectbox(
-            "Select Chart",
-            [
-                "Histogram",
-                "Scatter",
-                "Box",
-                "Line"
-            ]
-        )
+            st.markdown(f"### 🔹 {model}")
 
-        column = st.selectbox(
-            "Select Column",
-            numeric_columns
-        )
-
-        if chart == "Histogram":
-
-            fig = px.histogram(
-                df,
-                x=column
+            df_metrics = pd.DataFrame(
+                list(values.items()),
+                columns=["Metric", "Value"]
             )
 
-        elif chart == "Scatter":
+            st.dataframe(df_metrics, use_container_width=True)
 
-            fig = px.scatter(
-                df,
-                x=numeric_columns[0],
-                y=numeric_columns[-1],
-                color=target
-            )
-
-        elif chart == "Box":
-
-            fig = px.box(
-                df,
-                y=column,
-                color=target
-            )
-
-        else:
-
-            fig = px.line(
-                df,
-                y=column
-            )
-
-        st.plotly_chart(
-            fig,
-            width='stretch'
-        )
-
-    # ---------------------------------------------------
-    # RUN ANALYSIS
-    # ---------------------------------------------------
-    if st.button("🚀 Run AI Analysis"):
-
-        with st.spinner("Training ML Models..."):
-
-            try:
-
-                uploaded_file.seek(0)
-
-                files = {
-
-                    "file": (
-
-                        uploaded_file.name,
-
-                        uploaded_file.getvalue(),
-
-                        uploaded_file.type
-
-                    )
-                }
-
-                response = requests.post(
-                    API_URL,
-                    files=files,
-                    params={"target": target},
-                    timeout=300
-                )
-
-                st.write(
-                    f"Status Code: {response.status_code}"
-                )
-
-                # ---------------------------------------
-                # SUCCESS
-                # ---------------------------------------
-                if response.status_code == 200:
-
-                    result = response.json()
-
-                    if "error" in result:
-
-                        st.error(result["error"])
-
-                    else:
-
-                        # -------------------------------
-                        # RESULTS
-                        # -------------------------------
-                        st.subheader(
-                            "🤖 AutoML Results"
-                        )
-
-                        st.json(result)
-
-                        # -------------------------------
-                        # METRICS
-                        # -------------------------------
-                        x1, x2, x3 = st.columns(3)
-
-                        x1.metric(
-                            "Task",
-                            result.get("task", "N/A")
-                        )
-
-                        x2.metric(
-                            "Best Model",
-                            result.get(
-                                "best_model",
-                                "N/A"
-                            )
-                        )
-
-                        x3.metric(
-                            "Metric",
-                            result.get(
-                                "metric",
-                                "N/A"
-                            )
-                        )
-
-                        # -------------------------------
-                        # SCORES
-                        # -------------------------------
-                        scores = result.get(
-                            "scores",
-                            {}
-                        )
-
-                        score_df = pd.DataFrame({
-
-                            "Model":
-                            list(scores.keys()),
-
-                            "Score":
-                            list(scores.values())
-
-                        })
-
-                        st.subheader(
-                            "📊 Model Performance"
-                        )
-
-                        st.dataframe(
-                            score_df,
-                            width='stretch'
-                        )
-
-                        # -------------------------------
-                        # BAR CHART
-                        # -------------------------------
-                        fig = px.bar(
-                            score_df,
-                            x="Model",
-                            y="Score",
-                            text="Score",
-                            title="Model Comparison"
-                        )
-
-                        fig.update_traces(
-                            textposition="outside"
-                        )
-
-                        st.plotly_chart(
-                            fig,
-                            width='stretch'
-                        )
-
-                        st.success(
-                            f"""
-                            🏆 Best Model:
-                            {result['best_model']}
-                            """
-                        )
-
-                else:
-
-                    st.error(
-                        f"""
-                        Backend Error:
-                        {response.status_code}
-                        """
-                    )
-
-                    st.text(response.text)
-
-            except requests.exceptions.Timeout:
-
-                st.error(
-                    """
-                    Request Timeout.
-                    Backend may be sleeping.
-                    """
-                )
-
-            except Exception as e:
-
-                st.error(f"Error: {e}")
-
-else:
-
-    st.info(
-        "📂 Upload dataset to start analysis"
-    )
+        # ---------------- BEST MODEL CARD ----------------
+        best = result["best_model"]
+        st.metric("🏆 Best Model", best, result["scores"][best])
