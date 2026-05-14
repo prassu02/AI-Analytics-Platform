@@ -16,10 +16,13 @@ app.add_middleware(
     allow_headers=['*'],
 )
 
+from fastapi.responses import JSONResponse
 
-@app.get('/')
+@app.api_route("/", methods=["GET", "HEAD"])
 def home():
-    return {'message': 'AI Analytics Platform API Running'}
+    return JSONResponse(
+        content={"message": "AI Analytics Platform API Running"}
+    )
 
 
 @app.post('/analyze/')
