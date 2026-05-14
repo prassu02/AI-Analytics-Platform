@@ -117,7 +117,7 @@ POST /analyze/?target=column_name
                   ▼
      ┌───────────────────────────┐
      │ ML Models (Sklearn, XGB)  │
-     │ -Logistic, SVM, Linear, XGB    │
+     │ -RF , SVM, Linear, XGB    │
      └───────────────────────────┘
 ```
 
