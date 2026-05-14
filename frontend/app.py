@@ -16,16 +16,44 @@ uploaded_file = st.file_uploader(
 
 if uploaded_file:
 
-    df = pd.read_csv(uploaded_file) if uploaded_file.name.endswith('.csv') else pd.read_excel(uploaded_file)
+    # -----------------------------
+    # READ DATASET
+    # -----------------------------
+    try:
 
+        if uploaded_file.name.endswith('.csv'):
+            df = pd.read_csv(uploaded_file)
+
+        else:
+            df = pd.read_excel(uploaded_file)
+
+        st.success('Dataset Loaded Successfully')
+
+    except Exception as e:
+
+        st.error(f"File Reading Error: {e}")
+        st.stop()
+
+    # -----------------------------
+    # PREVIEW
+    # -----------------------------
     st.subheader('📊 Dataset Preview')
 
     st.dataframe(df.head())
 
     st.write('Shape:', df.shape)
 
-    target = st.selectbox('Select Target Column', df.columns)
+    # -----------------------------
+    # TARGET
+    # -----------------------------
+    target = st.selectbox(
+        'Select Target Column',
+        df.columns
+    )
 
+    # -----------------------------
+    # VISUALIZATION
+    # -----------------------------
     chart = st.selectbox(
         'Visualization',
         ['Histogram', 'Scatter', 'Box', 'Line']
@@ -35,55 +63,134 @@ if uploaded_file:
 
     if len(numeric_columns) > 0:
 
-        column = st.selectbox('Column', numeric_columns)
+        column = st.selectbox(
+            'Column',
+            numeric_columns
+        )
 
         if chart == 'Histogram':
+
             fig = px.histogram(df, x=column)
 
         elif chart == 'Scatter':
-            fig = px.scatter(df, x=numeric_columns[0], y=numeric_columns[-1])
+
+            fig = px.scatter(
+                df,
+                x=numeric_columns[0],
+                y=numeric_columns[-1]
+            )
 
         elif chart == 'Box':
+
             fig = px.box(df, y=column)
 
         else:
+
             fig = px.line(df, y=column)
 
-        st.plotly_chart(fig, use_container_width=True)
-
-    if st.button('Run AI Analysis'):
-
-        files = {
-            'file': (
-                uploaded_file.name,
-                uploaded_file.getvalue(),
-                uploaded_file.type
-            )
-        }
-
-        response = requests.post(
-            API_URL,
-            files=files,
-            params={'target': target}
+        st.plotly_chart(
+            fig,
+            use_container_width=True
         )
 
-        result = response.json()
+    # -----------------------------
+    # AI ANALYSIS
+    # -----------------------------
+    if st.button('Run AI Analysis'):
 
-        st.subheader('🤖 AutoML Results')
+        with st.spinner("Running AutoML Analysis..."):
 
-        st.json(result)
+            try:
 
-        scores = result['scores']
+                # Reset file pointer
+                uploaded_file.seek(0)
 
-        score_df = pd.DataFrame({
-            'Model': list(scores.keys()),
-            'Score': list(scores.values())
-        })
+                files = {
+                    'file': (
+                        uploaded_file.name,
+                        uploaded_file.getvalue(),
+                        uploaded_file.type
+                    )
+                }
 
-        st.dataframe(score_df)
+                response = requests.post(
+                    API_URL,
+                    files=files,
+                    params={'target': target},
+                    timeout=120
+                )
 
-        fig = px.bar(score_df, x='Model', y='Score')
+                # -----------------------------
+                # DEBUG STATUS
+                # -----------------------------
+                st.write("Status Code:", response.status_code)
 
-        st.plotly_chart(fig, use_container_width=True)
+                # -----------------------------
+                # HANDLE SUCCESS
+                # -----------------------------
+                if response.status_code == 200:
 
-        st.success(f"Best Model: {result['best_model']}")
+                    result = response.json()
+
+                    st.subheader('🤖 AutoML Results')
+
+                    st.json(result)
+
+                    # -----------------------------
+                    # SCORES
+                    # -----------------------------
+                    scores = result.get('scores', {})
+
+                    if scores:
+
+                        score_df = pd.DataFrame({
+                            'Model': list(scores.keys()),
+                            'Score': list(scores.values())
+                        })
+
+                        st.dataframe(score_df)
+
+                        fig = px.bar(
+                            score_df,
+                            x='Model',
+                            y='Score'
+                        )
+
+                        st.plotly_chart(
+                            fig,
+                            use_container_width=True
+                        )
+
+                    st.success(
+                        f"Best Model: {result.get('best_model', 'N/A')}"
+                    )
+
+                else:
+
+                    st.error(
+                        f"Backend Error {response.status_code}"
+                    )
+
+                    st.text(response.text)
+
+            except requests.exceptions.Timeout:
+
+                st.error(
+                    "Request Timeout. Render free tier may be sleeping."
+                )
+
+            except requests.exceptions.JSONDecodeError:
+
+                st.error(
+                    "Invalid JSON response from backend."
+                )
+
+                st.text(response.text)
+
+            except Exception as e:
+
+                st.error(f"Unexpected Error: {e}")
+
+else:
+
+    st.info("Upload dataset to begin")
