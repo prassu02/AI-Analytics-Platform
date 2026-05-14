@@ -8,14 +8,17 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
 from sklearn.metrics import accuracy_score, r2_score
 
+# MODELS
 from sklearn.linear_model import LogisticRegression, LinearRegression
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
+from sklearn.svm import SVC, SVR
+from xgboost import XGBClassifier, XGBRegressor
 
 app = FastAPI()
 
-# -----------------------------------
+# ---------------------------------------------------
 # CORS
-# -----------------------------------
+# ---------------------------------------------------
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -24,30 +27,31 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# -----------------------------------
+# ---------------------------------------------------
 # HOME
-# -----------------------------------
+# ---------------------------------------------------
 @app.get("/")
+@app.head("/")
 def home():
 
     return {
-        "message": "AI Analytics Platform API Running"
+        "message": "AI Analytics Platform Backend Running"
     }
 
-# -----------------------------------
+# ---------------------------------------------------
 # ANALYZE
-# -----------------------------------
+# ---------------------------------------------------
 @app.post("/analyze/")
-async def analyze(
+async def analyze_dataset(
     file: UploadFile = File(...),
     target: str = ""
 ):
 
     try:
 
-        # -----------------------------
+        # -------------------------------------------
         # READ FILE
-        # -----------------------------
+        # -------------------------------------------
         if file.filename.endswith(".csv"):
 
             df = pd.read_csv(file.file)
@@ -56,57 +60,57 @@ async def analyze(
 
             df = pd.read_excel(file.file)
 
-        # -----------------------------
-        # VALIDATE TARGET
-        # -----------------------------
+        # -------------------------------------------
+        # CHECK TARGET
+        # -------------------------------------------
         if target not in df.columns:
 
             return {
                 "error": f"Target column '{target}' not found"
             }
 
-        # -----------------------------
-        # CLEAN
-        # -----------------------------
+        # -------------------------------------------
+        # CLEANING
+        # -------------------------------------------
         df = df.drop_duplicates()
 
-        df = df.fillna(0)
+        df = df.fillna(df.select_dtypes(
+            include=np.number
+        ).mean())
 
-        # -----------------------------
-        # FEATURES
-        # -----------------------------
+        # -------------------------------------------
+        # FEATURES + TARGET
+        # -------------------------------------------
         X = df.drop(columns=[target])
 
         y = df[target]
 
+        # -------------------------------------------
+        # ENCODING
+        # -------------------------------------------
         X = pd.get_dummies(X)
 
-        # -----------------------------
+        X = X.replace(
+            [np.inf, -np.inf],
+            np.nan
+        )
+
+        X = X.fillna(0)
+
+        # -------------------------------------------
         # TASK DETECTION
-        # -----------------------------
-        if y.dtype == "object" or len(np.unique(y)) < 20:
+        # -------------------------------------------
+        if y.dtype == "object" or len(y.unique()) < 20:
 
             task = "classification"
-
-            le = LabelEncoder()
-
-            y = le.fit_transform(y)
-
-            model1 = LogisticRegression(max_iter=1000)
-
-            model2 = RandomForestClassifier()
 
         else:
 
             task = "regression"
 
-            model1 = LinearRegression()
-
-            model2 = RandomForestRegressor()
-
-        # -----------------------------
+        # -------------------------------------------
         # SPLIT
-        # -----------------------------
+        # -------------------------------------------
         X_train, X_test, y_train, y_test = train_test_split(
             X,
             y,
@@ -114,51 +118,112 @@ async def analyze(
             random_state=42
         )
 
-        # -----------------------------
-        # MODEL 1
-        # -----------------------------
-        model1.fit(X_train, y_train)
-
-        pred1 = model1.predict(X_test)
-
-        # -----------------------------
-        # MODEL 2
-        # -----------------------------
-        model2.fit(X_train, y_train)
-
-        pred2 = model2.predict(X_test)
-
-        # -----------------------------
-        # SCORE
-        # -----------------------------
+        # -------------------------------------------
+        # CLASSIFICATION
+        # -------------------------------------------
         if task == "classification":
 
-            score1 = accuracy_score(y_test, pred1)
+            encoder = LabelEncoder()
 
-            score2 = accuracy_score(y_test, pred2)
+            y_train = encoder.fit_transform(y_train)
 
+            y_test = encoder.transform(y_test)
+
+            models = {
+
+                "LogisticRegression":
+                LogisticRegression(max_iter=1000),
+
+                "RandomForest":
+                RandomForestClassifier(),
+
+                "SVM":
+                SVC(),
+
+                "XGBoost":
+                XGBClassifier(
+                    eval_metric='mlogloss'
+                )
+
+            }
+
+            metric_name = "Accuracy"
+
+        # -------------------------------------------
+        # REGRESSION
+        # -------------------------------------------
         else:
 
-            score1 = r2_score(y_test, pred1)
+            models = {
 
-            score2 = r2_score(y_test, pred2)
+                "LinearRegression":
+                LinearRegression(),
 
-        scores = {
-            "Logistic/Linear": float(score1),
-            "RandomForest": float(score2)
-        }
+                "RandomForest":
+                RandomForestRegressor(),
 
-        best_model = max(scores, key=scores.get)
+                "SVR":
+                SVR(),
 
-        # -----------------------------
-        # RETURN JSON
-        # -----------------------------
+                "XGBoost":
+                XGBRegressor()
+
+            }
+
+            metric_name = "R2 Score"
+
+        # -------------------------------------------
+        # TRAIN MODELS
+        # -------------------------------------------
+        scores = {}
+
+        for name, model in models.items():
+
+            model.fit(X_train, y_train)
+
+            predictions = model.predict(X_test)
+
+            if task == "classification":
+
+                score = accuracy_score(
+                    y_test,
+                    predictions
+                )
+
+            else:
+
+                score = r2_score(
+                    y_test,
+                    predictions
+                )
+
+            scores[name] = round(float(score), 4)
+
+        # -------------------------------------------
+        # BEST MODEL
+        # -------------------------------------------
+        best_model = max(
+            scores,
+            key=scores.get
+        )
+
+        # -------------------------------------------
+        # RESPONSE
+        # -------------------------------------------
         return {
+
             "task": task,
+
+            "metric": metric_name,
+
             "rows": int(df.shape[0]),
+
             "columns": int(df.shape[1]),
+
             "scores": scores,
+
             "best_model": best_model
+
         }
 
     except Exception as e:
