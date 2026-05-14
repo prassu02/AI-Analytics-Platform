@@ -3,11 +3,6 @@ uvicorn
 pandas
 numpy
 scikit-learn
-xgboost
-lightgbm
-plotly
-matplotlib
 python-multipart
-reportlab
 joblib
 openpyxl
